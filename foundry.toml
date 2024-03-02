@@ -1,0 +1,6 @@
+
+[profile.ci.fuzz]
+runs = 10_000
+remappings = [ # Libraries that we use from node_modules and are used by the smart contracts
+  "@openzeppelin/=lib/openzeppelin-contracts/"
+]
