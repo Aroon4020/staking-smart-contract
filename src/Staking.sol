@@ -8,8 +8,9 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "../interfaces/IStaking.sol";
-import "../interfaces/ISwapRouter.sol";
+import "./interfaces/IStaking.sol";
+import "./interfaces/ISwapRouter.sol";
+import "forge-std/Test.sol";
 
 /**
  * @title Staking Contract
@@ -68,35 +69,32 @@ contract Staking is IStaking, ReentrancyGuard {
 
         // Update user information
         UserInfo storage user = userInfo[msg.sender];
+        
         user.stakeAmount += amount;
         user.lastUpdateBlock = block.number;
+
     }
 
     /**
      * @dev Function to withdraw staked tokens and rewards.
-     * @param amount The amount of staked tokens to withdraw.
      */
-    function unstake(uint256 amount) external override nonReentrant {
-        require(amount > 0, "Amount must be greater than 0");
-
+    function unstake() external override nonReentrant {
+       
         UserInfo storage user = userInfo[msg.sender];
-        uint256 rewardAmount = calculateEarnedRewards(user);
-
-        require(user.stakeAmount >= amount, "Insufficient staked amount");
-
-        // Update user information
-        user.stakeAmount -= amount;
-        user.lastUpdateBlock = block.number;
-
+        require(user.stakeAmount > 0, "Insufficient staked amount");
+        uint256 rewardAmount = calculateEarnedRewards(userInfo[msg.sender]);
         if (rewardAmount > 0) {
             rewardToken.safeTransfer(msg.sender, rewardAmount);
         }
-        stakingToken.safeTransfer(msg.sender, amount);
+        stakingToken.safeTransfer(msg.sender, user.stakeAmount);
+        
+        // freeup storage
+        delete userInfo[msg.sender];
     }
 
     /**
      * @dev Function to harvest rewards and unstake all tokens.
-     * @param amountOutMin The minimum amount of staking tokens to receive after swapping rewards.
+     * @param amountOutMin The minimum amount of swap token.
      */
     function harvestAndUnstake(
         uint256 amountOutMin
@@ -106,16 +104,15 @@ contract Staking is IStaking, ReentrancyGuard {
         if (rewards > 0) {
             user.stakeAmount += _swap(rewards, amountOutMin);
         }
-        // Update user information
-        user.stakeAmount = 0;
-        user.lastUpdateBlock = block.number;
-
         stakingToken.safeTransfer(msg.sender, user.stakeAmount);
+
+        // freeup storage
+        delete userInfo[msg.sender];
     }
 
     /**
      * @dev Function to harvest (compound) rewards.
-     * @param amountOutMin The minimum amount of staking tokens to receive after swapping rewards.
+     * @param amountOutMin The minimum amount of swap token.
      */
     function harvest(uint256 amountOutMin) external override nonReentrant {
         UserInfo storage user = userInfo[msg.sender];
@@ -135,7 +132,7 @@ contract Staking is IStaking, ReentrancyGuard {
         UserInfo memory user
     ) public view returns (uint256) {
         uint256 blocksSinceLastUpdate = block.number - user.lastUpdateBlock;
-        return (user.stakeAmount * rewardRate * blocksSinceLastUpdate) / 1000;
+        return (user.stakeAmount * rewardRate * blocksSinceLastUpdate) / 10000;
     }
 
     /**
